@@ -1,3 +1,6 @@
+Tested on Windows.
+
+How:
 1. Add *arr URLS/API to config section.
 2. Run.
 
