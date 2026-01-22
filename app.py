@@ -36,7 +36,7 @@ ENABLE_RSS_CIRCLE = True	# or False
 ENABLE_SONARR = True		# or False
 ENABLE_RADARR = True		# or False
 
-WHAT_TO_SEARCH = "MISSING"	# or UPGRADE
+WHAT_TO_SEARCH = "MISSING"	# or UPGRADE IMPORTANT, UPGRADE ONLY WORKS WITH RADARR NOT SONARR, if you use UPGRADE put [ENABLE_SONARR = FALSE] or it will crash.
 
 NUM_MOVIES_TO_UPGRADE = 1	# Per Circle this many searches to Tracker will be triggered for each radarr instance.
 MAX_SEASONS = 1			# How many Seasons one circle will Search for each Sonarr instance.
