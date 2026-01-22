@@ -17,17 +17,17 @@ What it do?
      - The comandline window will update and show the last log entry every 15 seconds.
 
 CONFIGS:
-    # INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
-ENABLE_RSS_CIRCLE = True	# or False
-ENABLE_SONARR = True		# or False
-ENABLE_RADARR = True		# or False
-TIME_BETWEEN_RSS_CALLS = 300	# This is the time between each RSS-Instance, once run it will wait the CIRCLE_TIMER.
+-     # INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
+- ENABLE_RSS_CIRCLE = True	# or False
+- ENABLE_SONARR = True		# or False
+- ENABLE_RADARR = True		# or False
+- TIME_BETWEEN_RSS_CALLS = 300	# This is the time between each RSS-Instance, once run it will wait the CIRCLE_TIMER.
+- 
+- WHAT_TO_SEARCH = "MISSING"	# or UPGRADE
+- CIRCLE_TIMER = 2500		# Pause after one full circle through all enabled moduls Radarr-Sonarr-Rss.
+- TIME_BETWEEN_ARR_INSTANCES = 60	# Each instance will trigger NUM_MOVIES_TO_UPGRADE with no further break.
 
-WHAT_TO_SEARCH = "MISSING"	# or UPGRADE
-CIRCLE_TIMER = 2500		# Pause after one full circle through all enabled moduls Radarr-Sonarr-Rss.
-TIME_BETWEEN_ARR_INSTANCES = 60	# Each instance will trigger NUM_MOVIES_TO_UPGRADE with no further break.
-
-NUM_MOVIES_TO_UPGRADE = 1	# Per Circle this many movie searches will be triggered for each radarr instance.
-MAX_SEASONS = 1			# How many Seasons one circle will Search for each Sonarr instance.
-
-RECENT_SEARCH_DAYS = 7		# Amount of time when a searched item might be searched again earliest, for full fresh start delete 'searched_movies.json'.
+- NUM_MOVIES_TO_UPGRADE = 1	# Per Circle this many movie searches will be triggered for each radarr instance.
+- MAX_SEASONS = 1			# How many Seasons one circle will Search for each Sonarr instance.
+- 
+- RECENT_SEARCH_DAYS = 7		# Amount of time when a searched item might be searched again earliest, for full fresh start delete 'searched_movies.json'.
