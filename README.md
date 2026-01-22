@@ -8,13 +8,13 @@ How:
 2. Run.
 
 What it do?
-  1. Circles through all *arr instances with a 60 second delay.
-  1.2. For Radarr it searches for a set amount of Missing Movies.
-  1.3. For Sonarr it searches for a set amount of Missing Seasons.
-     - It will exclude searched Movies/Seasons for 7 days, in case it could not be downloaded/found on the last search.
-  2. It triggers RSS Sync for each instance with a 5 Minute delay between.
-  3. It takes a 2500 second (41min) break and starts over.
-     - The comandline window will update and show the last log entry every 15 seconds.
+  1. Circles through all *arr instances with a 60 second delay.  
+  1.2. For Radarr it searches for a set amount of Missing Movies.  
+  1.3. For Sonarr it searches for a set amount of Missing Seasons.  
+     - It will exclude searched Movies/Seasons for 7 days, in case it could not be downloaded/found on the last search.  
+  2. It triggers RSS Sync for each instance with a 5 Minute delay between.  
+  3. It takes a 2500 second (41min) break and starts over.  
+     - The comandline window will update and show the last log entry every 15 seconds.  
 
 CONFIGS:
 -     # INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
