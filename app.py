@@ -327,23 +327,10 @@ def get_missing_movies(radarr_url):
         if movie.get("monitored") and not movie.get("hasFile")
     ]
 
-def get_all_movie_files(radarr_url):
-    logger.info("Fetching all movie files in one request")
-    MOVIEFILES_GET_API_CALL = radarr_url + API_PATH + MOVIEFILE_ENDPOINT
-    response = requests.get(
-        MOVIEFILES_GET_API_CALL,
-        headers=radarr_headers,
-        timeout=60
-    )
-    response.raise_for_status()
-    # Build lookup: movieFileId → customFormatScore
-    return {
-        mf["id"]: mf.get("customFormatScore", 0)
-        for mf in response.json()
-    }
-
 def get_movies_with_files(radarr_url):
-    MOVIES_GET_API_CALL = radarr_url + API_PATH + MOVIE_ENDPOINT
+    MOVIES_GET_API_CALL = (
+        radarr_url + API_PATH + MOVIE_ENDPOINT + "?includeMovieFile=true"
+    )
     response = requests.get(
         MOVIES_GET_API_CALL,
         headers=radarr_headers,
@@ -352,25 +339,24 @@ def get_movies_with_files(radarr_url):
     response.raise_for_status()
     return [
         movie for movie in response.json()
-        if movie.get("monitored") and movie.get("movieFileId", 0) > 0
+        if movie.get("monitored") and movie.get("movieFile")
     ]
 
-def get_movies_needing_upgrade(movies, movie_files, quality_to_formats):
+def get_movies_needing_upgrade(movies, quality_to_formats):
     logger.info("Evaluating movies for upgrade eligibility")
     movie_ids = []
     for movie in movies:
-        if not movie.get("monitored"):
+        movie_file = movie.get("movieFile")
+        if not movie_file:
             continue
-        movie_file_id = movie.get("movieFileId", 0)
-        if movie_file_id <= 0:
-            continue
-        current_score = movie_files.get(movie_file_id)
-        if current_score is None:
-            continue
-        cutoff_score = quality_to_formats.get(movie["qualityProfileId"], 0)
+        current_score = movie_file.get("customFormatScore", 0)
+        cutoff_score = quality_to_formats.get(
+            movie["qualityProfileId"], 0
+        )
         if current_score < cutoff_score:
             movie_ids.append(movie["id"])
     return movie_ids
+
 
 def process_radarr(radarr_url):
     movies = []
@@ -388,17 +374,14 @@ def process_radarr(radarr_url):
     if WHAT_TO_SEARCH.upper() not in ["UPGRADE", "MISSING"]:
         logger.error("Invalid WHAT_TO_SEARCH value. Must be 'UPGRADE' or 'MISSING'.")
         return
-
     if WHAT_TO_SEARCH == "UPGRADE":
         movies = get_movies_with_files(radarr_url)
         if not isinstance(movies, list):
             logger.error(f"Failed to get movies from {radarr_url}")
             return
         quality_to_formats = get_radarr_quality_cutoff_scores(radarr_url)
-        movie_files = get_all_movie_files(radarr_url)
         movie_ids = get_movies_needing_upgrade(
             movies,
-            movie_files,
             quality_to_formats
         )
     elif WHAT_TO_SEARCH == "MISSING":
@@ -410,12 +393,10 @@ def process_radarr(radarr_url):
     else:
         logger.warning(f"Invalid WHAT_TO_SEARCH value: {WHAT_TO_SEARCH}")
         return
-
     filtered_movie_ids = []
     for movie_id in movie_ids:
         if not is_movie_searched_recently(movie_id):
             filtered_movie_ids.append(movie_id)
-
     if not filtered_movie_ids:
         logger.info(f"All movies have been searched recently for {radarr_url}. Skipping this cycle.")
         return
@@ -443,6 +424,10 @@ def process_radarr(radarr_url):
     except requests.exceptions.RequestException as e:
         logger.error(f"Error searching Radarr movies at {radarr_url}: {e}")
 
+############
+### RSS ####
+############
+
 def trigger_rss_sync(url, headers):
     SEARCH_API_CALL = url + API_PATH + COMMAND_ENDPOINT
     data = {"name": "RssSync"}
@@ -452,11 +437,7 @@ def trigger_rss_sync(url, headers):
         logger.info(f"Triggered RSS sync for {url}")
     except Exception as e:
         logger.error(f"Failed to trigger RSS sync for {url}: {e}")
-
-############
-### RSS ####
-############
-
+		
 def rss_cycle():
     for radarr_url in RADARR_URLS:
         url_index = RADARR_URLS.index(radarr_url)
