@@ -1,4 +1,7 @@
 Tested on Windows.
+NOTE:
+ONLY [WHAT_TO_SEARCH = 'MISSING'] HAS BEEN TESTED YET.
+WILL TEST 'UPGRADE' IN A BIT HOPEFULLY.
 
 How:
 1. Add *arr URLS/API to config section.
@@ -8,15 +11,10 @@ What it do?
 - Circles through all *arr instances with a 60 second delay.
 - 1. For Radarr it searches for a set amount of Missing Movies.
   2. For Sonarr it searches for a set amount of Missing Seasons.
-     - It will exclude and triggered Movie/Season for 7 days, in case it could not be downloaded/found.
+     - It will exclude searched Movie/Season for 7 days, in case it could not be downloaded/found on the last search.
   3. It triggers RSS Sync for each instance with a 5 Minute delay between.
   4. It takes a 2500 second (41min) break and starts over.
      - The comandline window will update and show the last log entry every 15 seconds.
-
-NOTE:
-ONLY WHAT_TO_SEARCH = 'MISSING' HAS BEEN TESTED YET.
-WILL TEST 'UPGRADE' IN A BIT HOPEFULLY.
-
 
 CONFIGS:
     # INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
