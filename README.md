@@ -1,7 +1,5 @@
-NOTE:  
-Tested on Windows  
-ONLY [WHAT_TO_SEARCH = 'MISSING'] HAS BEEN TESTED YET.  
-[WHAT_TO_SEARCH = 'UPGRADE'] ONLY WORKS WITH RADARR SO FAR, IT WILL CRASH IF YOU ENABLE SONARR.
+-Tested on Windows   
+IMPORTANT >>>>> [WHAT_TO_SEARCH = 'UPGRADE'] only works with Radarr, IT WILL CRASH IF YOU ENABLE SONARR.
 
 How:  
 1. Add *arr URLS/API to config section.  
