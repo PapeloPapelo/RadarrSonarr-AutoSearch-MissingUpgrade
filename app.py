@@ -138,134 +138,104 @@ def get_episode_files_by_series(sonarr_url, series_id):
     EPISODEFILE_GET_API_CALL = (
         sonarr_url + API_PATH + EPISODEFILE_ENDPOINT + f"?seriesId={series_id}"
     )
-
     response = requests.get(
         EPISODEFILE_GET_API_CALL,
         headers=sonarr_headers,
         timeout=60
     )
     response.raise_for_status()
-
     return {
         ef["id"]: ef
         for ef in response.json()
     }
 
-
 def get_episodes_by_series(sonarr_url, series_id):
     EPISODE_GET_API_CALL = (
         sonarr_url + API_PATH + EPISODE_ENDPOINT + f"?seriesId={series_id}"
     )
-
     response = requests.get(
         EPISODE_GET_API_CALL,
         headers=sonarr_headers,
         timeout=60
     )
     response.raise_for_status()
-
     return response.json()
 
 def season_has_mixed_release_groups(episodes, episode_files, season_number):
     release_groups = set()
-
     for ep in episodes:
         if ep.get("seasonNumber") != season_number:
             continue
-
         file_id = ep.get("episodeFileId")
         if not file_id:
-            # Missing episode → not our concern here
             return False
-
         ep_file = episode_files.get(file_id)
         if not ep_file:
             continue
-
         rg = ep_file.get("releaseGroup")
         if rg:
             release_groups.add(rg)
-
         if len(release_groups) > 1:
             return True
-
     return False
 
 def get_seasons_to_search(sonarr_url):
     SERIES_GET_API_CALL = sonarr_url + API_PATH + SERIES_ENDPOINT
-
     response = requests.get(
         SERIES_GET_API_CALL,
         headers=sonarr_headers,
         timeout=60
     )
     response.raise_for_status()
-
     seasons_to_search = []
     now = datetime.now(timezone.utc)
-
     for series in response.json():
-
         series_id = series.get("id")
         if not series_id:
             continue
-
         episodes = None
         episode_files = None
-
         if WHAT_TO_SEARCH == "UPGRADE":
             episodes = get_episodes_by_series(sonarr_url, series_id)
             episode_files = get_episode_files_by_series(sonarr_url, series_id)
-
         for season in series.get("seasons", []):
-
             season_number = season.get("seasonNumber")
-
             if season_number == 0:
                 continue
             if not season.get("monitored"):
                 continue
-
             air_date = season.get("airDateUtc")
             if air_date:
                 air_date = datetime.fromisoformat(air_date.replace("Z", "+00:00"))
                 if air_date > now:
                     continue
-
             stats = season.get("statistics", {})
             episode_count = stats.get("episodeCount", 0)
             file_count = stats.get("episodeFileCount", 0)
-
             if episode_count == 0:
                 continue
-
             if WHAT_TO_SEARCH == "MISSING":
                 if file_count == 0:
                     seasons_to_search.append((series_id, season_number))
-
             elif WHAT_TO_SEARCH == "UPGRADE":
                 if episode_count != file_count:
                     continue  # incomplete season, not a pack candidate
-
                 if season_has_mixed_release_groups(
                     episodes,
                     episode_files,
                     season_number
                 ):
                     seasons_to_search.append((series_id, season_number))
-
     return seasons_to_search
 
 def search_sonarr_seasons(sonarr_url, seasons):
     SEARCH_API_CALL = sonarr_url + API_PATH + COMMAND_ENDPOINT
-
     for series_id, season_number in seasons:
         data = {
             "name": "SeasonSearch",
             "seriesId": series_id,
             "seasonNumber": season_number
         }
-
         response = requests.post(
             SEARCH_API_CALL,
             headers=sonarr_headers,
@@ -276,47 +246,36 @@ def search_sonarr_seasons(sonarr_url, seasons):
 
 def process_sonarr(sonarr_url):
     global sonarr_headers
-
     if WHAT_TO_SEARCH.upper() not in ["UPGRADE", "MISSING"]:
         logger.error("Invalid WHAT_TO_SEARCH value. Must be 'UPGRADE' or 'MISSING'.")
         return
-
     try:
         url_index = SONARR_URLS.index(sonarr_url)
         api_key = SONARR_API_KEYS[url_index]
     except (ValueError, IndexError):
         logger.error(f"No API key found for Sonarr instance {sonarr_url}")
         return
-
     if not api_key:
         logger.error("API key not set for Sonarr instance.")
         return
-
     sonarr_headers = {"X-Api-Key": api_key}
-
     seasons = get_seasons_to_search(sonarr_url)
-
     filtered = [
         (sid, sn) for (sid, sn) in seasons
         if not is_movie_searched_recently(f"sonarr_{sid}_{sn}")
     ]
-
     if not filtered:
         logger.info(f"All Sonarr seasons searched recently for {sonarr_url}.")
         return
-
     if len(filtered) <= MAX_SEASONS:
         selected = filtered
     else:
         selected = random.sample(filtered, MAX_SEASONS)
-
     logger.info(f"Sonarr seasons selected for search: {selected}")
-
     searched = load_searched_movies()
     for sid, sn in selected:
         searched[f"sonarr_{sid}_{sn}"] = int(time.time())
     save_searched_movies(searched)
-
     search_sonarr_seasons(sonarr_url, selected)
 
 ################
@@ -499,20 +458,16 @@ def trigger_rss_sync(url, headers):
 ############
 
 def rss_cycle():
-    # Radarr
     for radarr_url in RADARR_URLS:
         url_index = RADARR_URLS.index(radarr_url)
         headers = {"X-Api-Key": RADARR_API_KEYS[url_index]}
         trigger_rss_sync(radarr_url, headers)
         time.sleep(TIME_BETWEEN_RSS_CALLS)
-
-    # Sonarr
     for sonarr_url in SONARR_URLS:
         url_index = SONARR_URLS.index(sonarr_url)
         headers = {"X-Api-Key": SONARR_API_KEYS[url_index]}
         trigger_rss_sync(sonarr_url, headers)
         time.sleep(TIME_BETWEEN_RSS_CALLS)
-
     logger.info("Completed RSS sync cycle.")
 
 ##############
@@ -524,53 +479,40 @@ def main():
         if not os.path.exists(SEARCHED_MOVIES_FILE):
             with open(SEARCHED_MOVIES_FILE, 'w') as f:
                 json.dump({}, f)
-
         if not RADARR_URLS and not SONARR_URLS:
             logger.warning("No Radarr or Sonarr URLs provided. Exiting.")
             return
-
     except Exception as e:
         logger.error(f"Could not initialize state: {e}")
         return
-
     threading.Thread(target=status_loop, daemon=True).start()
-
     while True:
         try:
             cleanup_searched_movies()
             logger.info(f"Starting new cycle with goal: {WHAT_TO_SEARCH}")
-
             if ENABLE_RADARR:
-                # --- Radarr ---
                 for radarr_url in RADARR_URLS:
                     logger.info(f"Processing Radarr instance: {radarr_url}")
                     process_radarr(radarr_url)
                     time.sleep(TIME_BETWEEN_ARR_INSTANCES)
-
             if ENABLE_SONARR:
-                # --- Sonarr ---
                 for sonarr_url in SONARR_URLS:
                     logger.info(f"Processing Sonarr instance: {sonarr_url}")
                     process_sonarr(sonarr_url)
                     time.sleep(TIME_BETWEEN_ARR_INSTANCES)
-
             if ENABLE_RSS_CIRCLE:
                 logger.info("Starting RSS circle.")
                 rss_cycle()
-
             else:
                 logger.info("RSS circle disabled.")
-
             logger.info( f"Cycle completed successfully, sleeping {CIRCLE_TIMER} seconds")
-
             time.sleep(CIRCLE_TIMER)
-
         except Exception as e:
             logger.error(
                 f"Fatal error in main loop: {e}",
                 exc_info=True
             )
             return
-
+			
 if __name__ == "__main__":
     main()
