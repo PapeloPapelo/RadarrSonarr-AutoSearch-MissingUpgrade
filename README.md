@@ -6,7 +6,7 @@ How:
 
 What it do?
 - Circles through all *arr instances with a 60 second delay.
-- 1. For Radarr it searches for a set amount of Missing Sovies.
+- 1. For Radarr it searches for a set amount of Missing Movies.
   2. For Sonarr it searches for a set amount of Missing Seasons.
      - It will exclude and triggered Movie/Season for 7 days, in case it could not be downloaded/found.
   3. It triggers RSS Sync for each instance with a 5 Minute delay between.
