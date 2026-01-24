@@ -9,9 +9,7 @@ import sys
 import threading
 
 ######################################
-######################################
 ##############  CONFIGS ##############
-######################################
 ######################################
 
 RADARR_URLS = [			# Make sure the URLS and matching API-Keys are in the same order! First URL = First Key.
@@ -50,8 +48,6 @@ TIME_BETWEEN_ARR_INSTANCES = 60	# Each instance will trigger NUM_MOVIES_TO_UPGRA
 
 RECENT_SEARCH_DAYS = 7		# Amount of time when a searched item might be searched again earliest, for full fresh start delete 'searched_movies.json'.
 
-######################################
-######################################
 ######################################
 ######################################
 ######################################
@@ -483,11 +479,6 @@ def process_duplicates(urls, keys, endpoint, id_field, instance_type):
     return duplicates
 
 def run_duplicate_check():
-    """
-    Checks duplicates across all INSTANCES.
-    Deletes lowest scored Radarr duplicates if ENABLE_DUPE_DELETION=True.
-    Logs Sonarr duplicates only.
-    """
     result = {
         "radarr": {},
         "sonarr": {},
