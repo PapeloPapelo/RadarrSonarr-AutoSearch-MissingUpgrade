@@ -31,12 +31,15 @@ SONARR_URLS = [
 SONARR_API_KEYS = [
     "1324",
 ]
+
 				# INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
-ENABLE_RSS_CIRCLE = True	# or False
+ENABLE_RSS_CIRCLE = True	# or False - ENABLE_SONARR or ENABLE_RADARR are unrelated to RSS.
 ENABLE_SONARR = True		# or False
 ENABLE_RADARR = True		# or False
+ENABLE_DUPE_CHECK = False	# or False When enabled it compares tmdb_id and tvdb_ids between *arr instances and throws a Warning if a movie or show is added twice.
+ENABLE_DUPE_DELETION = False	# WARNING! If a radarr duplicate is found the one with the lowest custom score will be fully deleted! Sonarr will only be logged no deletion.
 
-WHAT_TO_SEARCH = "MISSING"	# or UPGRADE IMPORTANT, UPGRADE ONLY WORKS WITH RADARR NOT SONARR, if you use UPGRADE put [ENABLE_SONARR = FALSE] or it will crash.
+WHAT_TO_SEARCH = "MISSING"	# or UPGRADE NOTE: Upgrade only works for Radarr it will skip Sonarr.
 
 NUM_MOVIES_TO_UPGRADE = 1	# Per Circle this many searches to Tracker will be triggered for each radarr instance.
 MAX_SEASONS = 1			# How many Seasons one circle will Search for each Sonarr instance.
@@ -61,16 +64,6 @@ logging.basicConfig(
     datefmt='%m/%d/%Y %I:%M:%S %p',
     level=logging.INFO
 )
-
-MOVIE_ENDPOINT = "movie"
-MOVIEFILE_ENDPOINT = "moviefile/"
-SERIES_ENDPOINT = "series"
-SEASON_ENDPOINT = "season"
-API_PATH = "/api/v3/"
-QUALITY_PROFILE_ENDPOINT = "qualityprofile"
-COMMAND_ENDPOINT = "command"
-SEARCHED_MOVIES_FILE = "./searched_movies.json"
-radarr_headers = {}
 
 INSTANCES = [
     {
@@ -130,6 +123,19 @@ def cleanup_searched_movies():
             del searched[movie_id]
     save_searched_movies(searched)
 
+MOVIE_ENDPOINT = "movie"
+MOVIEFILE_ENDPOINT = "moviefile/"
+SERIES_ENDPOINT = "series"
+SEASON_ENDPOINT = "season"
+API_PATH = "/api/v3/"
+QUALITY_PROFILE_ENDPOINT = "qualityprofile"
+COMMAND_ENDPOINT = "command"
+SEARCHED_MOVIES_FILE = "./searched_movies.json"
+radarr_headers = {}
+EPISODE_ENDPOINT = "episode"
+EPISODEFILE_ENDPOINT = "episodefile"
+TIMEOUT = 30
+
 ################
 #### SONARR ####
 ################
@@ -141,7 +147,7 @@ def get_episode_files_by_series(sonarr_url, series_id):
     response = requests.get(
         EPISODEFILE_GET_API_CALL,
         headers=sonarr_headers,
-        timeout=60
+        timeout=TIMEOUT
     )
     response.raise_for_status()
     return {
@@ -149,134 +155,101 @@ def get_episode_files_by_series(sonarr_url, series_id):
         for ef in response.json()
     }
 
-def get_episodes_by_series(sonarr_url, series_id):
-    EPISODE_GET_API_CALL = (
-        sonarr_url + API_PATH + EPISODE_ENDPOINT + f"?seriesId={series_id}"
-    )
-    response = requests.get(
-        EPISODE_GET_API_CALL,
-        headers=sonarr_headers,
-        timeout=60
-    )
-    response.raise_for_status()
-    return response.json()
-
-def season_has_mixed_release_groups(episodes, episode_files, season_number):
-    release_groups = set()
-    for ep in episodes:
-        if ep.get("seasonNumber") != season_number:
-            continue
-        file_id = ep.get("episodeFileId")
-        if not file_id:
-            return False
-        ep_file = episode_files.get(file_id)
-        if not ep_file:
-            continue
-        rg = ep_file.get("releaseGroup")
-        if rg:
-            release_groups.add(rg)
-        if len(release_groups) > 1:
-            return True
-    return False
-
 def get_seasons_to_search(sonarr_url):
     SERIES_GET_API_CALL = sonarr_url + API_PATH + SERIES_ENDPOINT
     response = requests.get(
         SERIES_GET_API_CALL,
         headers=sonarr_headers,
-        timeout=60
+        timeout=TIMEOUT
     )
     response.raise_for_status()
+
     seasons_to_search = []
-    now = datetime.now(timezone.utc)
+    searched = load_searched_movies()
+
     for series in response.json():
+        if len(seasons_to_search) >= MAX_SEASONS:
+            break
+
         series_id = series.get("id")
         if not series_id:
             continue
-        episodes = None
-        episode_files = None
-        if WHAT_TO_SEARCH == "UPGRADE":
-            episodes = get_episodes_by_series(sonarr_url, series_id)
-            episode_files = get_episode_files_by_series(sonarr_url, series_id)
+
+        episodes = episode_files = None
+
         for season in series.get("seasons", []):
+            if len(seasons_to_search) >= MAX_SEASONS:
+                break
+
             season_number = season.get("seasonNumber")
             if season_number == 0:
                 continue
             if not season.get("monitored"):
                 continue
-            air_date = season.get("airDateUtc")
-            if air_date:
-                air_date = datetime.fromisoformat(air_date.replace("Z", "+00:00"))
-                if air_date > now:
-                    continue
+
+            search_key = f"sonarr_{series_id}_{season_number}"
+            if search_key in searched:
+                continue
+
             stats = season.get("statistics", {})
             episode_count = stats.get("episodeCount", 0)
             file_count = stats.get("episodeFileCount", 0)
+
             if episode_count == 0:
                 continue
+
             if WHAT_TO_SEARCH == "MISSING":
                 if file_count == 0:
                     seasons_to_search.append((series_id, season_number))
-            elif WHAT_TO_SEARCH == "UPGRADE":
-                if episode_count != file_count:
-                    continue  # incomplete season, not a pack candidate
-                if season_has_mixed_release_groups(
-                    episodes,
-                    episode_files,
-                    season_number
-                ):
-                    seasons_to_search.append((series_id, season_number))
+
     return seasons_to_search
 
 def search_sonarr_seasons(sonarr_url, seasons):
     SEARCH_API_CALL = sonarr_url + API_PATH + COMMAND_ENDPOINT
+
     for series_id, season_number in seasons:
-        data = {
-            "name": "SeasonSearch",
-            "seriesId": series_id,
-            "seasonNumber": season_number
-        }
         response = requests.post(
             SEARCH_API_CALL,
             headers=sonarr_headers,
-            json=data,
-            timeout=60
+            json={
+                "name": "SeasonSearch",
+                "seriesId": series_id,
+                "seasonNumber": season_number
+            },
+            timeout=TIMEOUT
         )
         response.raise_for_status()
 
 def process_sonarr(sonarr_url):
     global sonarr_headers
-    if WHAT_TO_SEARCH.upper() not in ["UPGRADE", "MISSING"]:
-        logger.error("Invalid WHAT_TO_SEARCH value. Must be 'UPGRADE' or 'MISSING'.")
+
+    if WHAT_TO_SEARCH.upper() not in ["MISSING"]:
+        logger.error("Invalid WHAT_TO_SEARCH value.")
         return
+
     try:
-        url_index = SONARR_URLS.index(sonarr_url)
-        api_key = SONARR_API_KEYS[url_index]
+        api_key = SONARR_API_KEYS[SONARR_URLS.index(sonarr_url)]
     except (ValueError, IndexError):
-        logger.error(f"No API key found for Sonarr instance {sonarr_url}")
+        logger.error(f"No API key for Sonarr instance {sonarr_url}")
         return
-    if not api_key:
-        logger.error("API key not set for Sonarr instance.")
-        return
+
     sonarr_headers = {"X-Api-Key": api_key}
+
     seasons = get_seasons_to_search(sonarr_url)
-    filtered = [
-        (sid, sn) for (sid, sn) in seasons
-        if not is_movie_searched_recently(f"sonarr_{sid}_{sn}")
-    ]
-    if not filtered:
-        logger.info(f"All Sonarr seasons searched recently for {sonarr_url}.")
+    if not seasons:
+        logger.info(f"No Sonarr seasons to search for {sonarr_url}.")
         return
-    if len(filtered) <= MAX_SEASONS:
-        selected = filtered
-    else:
-        selected = random.sample(filtered, MAX_SEASONS)
-    logger.info(f"Sonarr seasons selected for search: {selected}")
+
+    logger.info(f"Sonarr seasons selected for search: {seasons}")
+
     searched = load_searched_movies()
-    for sid, sn in selected:
-        searched[f"sonarr_{sid}_{sn}"] = int(time.time())
+    now = int(time.time())
+
+    for sid, sn in seasons:
+        searched[f"sonarr_{sid}_{sn}"] = now
+
     save_searched_movies(searched)
-    search_sonarr_seasons(sonarr_url, selected)
+    search_sonarr_seasons(sonarr_url, seasons)
 
 ################
 #### RADARR ####
@@ -302,7 +275,7 @@ def is_movie_searched_recently(movie_id):
 def get_radarr_quality_cutoff_scores(radarr_url):
     QUALITY_PROFILES_GET_API_CALL = radarr_url + API_PATH + QUALITY_PROFILE_ENDPOINT
     try:
-        response = requests.get(QUALITY_PROFILES_GET_API_CALL, headers=radarr_headers, timeout=10)
+        response = requests.get(QUALITY_PROFILES_GET_API_CALL, headers=radarr_headers, timeout=TIMEOUT)
         response.raise_for_status()
         quality_profiles = response.json()
         quality_to_formats = {}
@@ -319,7 +292,7 @@ def get_missing_movies(radarr_url):
     response = requests.get(
         MOVIES_GET_API_CALL,
         headers=radarr_headers,
-        timeout=60
+        timeout=TIMEOUT
     )
     response.raise_for_status()
     return [
@@ -334,7 +307,7 @@ def get_movies_with_files(radarr_url):
     response = requests.get(
         MOVIES_GET_API_CALL,
         headers=radarr_headers,
-        timeout=60
+        timeout=TIMEOUT
     )
     response.raise_for_status()
     return [
@@ -356,7 +329,6 @@ def get_movies_needing_upgrade(movies, quality_to_formats):
         if current_score < cutoff_score:
             movie_ids.append(movie["id"])
     return movie_ids
-
 
 def process_radarr(radarr_url):
     movies = []
@@ -419,7 +391,7 @@ def process_radarr(radarr_url):
     data = {"name": "MoviesSearch", "movieIds": random_keys}
     SEARCH_MOVIES_POST_API_CALL = radarr_url + API_PATH + COMMAND_ENDPOINT
     try:
-        response = requests.post(SEARCH_MOVIES_POST_API_CALL, headers=radarr_headers, json=data, timeout=60)
+        response = requests.post(SEARCH_MOVIES_POST_API_CALL, headers=radarr_headers, json=data, timeout=TIMEOUT)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         logger.error(f"Error searching Radarr movies at {radarr_url}: {e}")
@@ -432,12 +404,12 @@ def trigger_rss_sync(url, headers):
     SEARCH_API_CALL = url + API_PATH + COMMAND_ENDPOINT
     data = {"name": "RssSync"}
     try:
-        response = requests.post(SEARCH_API_CALL, headers=headers, json=data, timeout=60)
+        response = requests.post(SEARCH_API_CALL, headers=headers, json=data, timeout=TIMEOUT)
         response.raise_for_status()
         logger.info(f"Triggered RSS sync for {url}")
     except Exception as e:
         logger.error(f"Failed to trigger RSS sync for {url}: {e}")
-		
+
 def rss_cycle():
     for radarr_url in RADARR_URLS:
         url_index = RADARR_URLS.index(radarr_url)
@@ -450,6 +422,99 @@ def rss_cycle():
         trigger_rss_sync(sonarr_url, headers)
         time.sleep(TIME_BETWEEN_RSS_CALLS)
     logger.info("Completed RSS sync cycle.")
+
+###################
+### DUPE CHECK ####
+###################
+
+def api_get(url, api_key, endpoint):
+    headers = {"X-Api-Key": api_key}
+    resp = requests.get(
+        url + API_PATH + endpoint,
+        headers=headers,
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def process_duplicates(urls, keys, endpoint, id_field, instance_type):
+    id_map = {}
+
+    for url, key in zip(urls, keys):
+        items = api_get(url, key, endpoint)
+
+        for item in items:
+            uid = item.get(id_field)
+            if not uid:
+                continue
+
+            id_map.setdefault(uid, []).append({
+                "instance": url,
+                "title": item.get("title"),
+                "year": item.get("year"),
+                "internal_id": item.get("id"),
+                "score": item.get("customScore") or 0,  # Radarr only
+            })
+
+    # keep only duplicates
+    duplicates = {k: v for k, v in id_map.items() if len(v) > 1}
+
+    # deletion logic (Radarr only)
+    if ENABLE_DUPE_DELETION and instance_type.lower() == "radarr":
+        for uid, entries in duplicates.items():
+            # find lowest scored entry
+            lowest = min(entries, key=lambda x: x["score"])
+            instance_url = lowest["instance"]
+            internal_id = lowest["internal_id"]
+
+            try:
+                delete_endpoint = f"movie/{internal_id}"
+                logger.info(f"Deleting RADARR duplicate '{lowest['title']}' from {instance_url}")
+                resp = requests.delete(
+                    instance_url + API_PATH + delete_endpoint,
+                    headers={"X-Api-Key": keys[urls.index(instance_url)]},
+                    params={"deleteFiles": True},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+            except Exception as e:
+                logger.error(f"Failed to delete {lowest['title']} from {instance_url}: {e}")
+
+    return duplicates
+
+def run_duplicate_check():
+    """
+    Checks duplicates across all INSTANCES.
+    Deletes lowest scored Radarr duplicates if ENABLE_DUPE_DELETION=True.
+    Logs Sonarr duplicates only.
+    """
+    result = {
+        "radarr": {},
+        "sonarr": {},
+    }
+
+    for inst in INSTANCES:
+        inst_type = inst["type"].lower()
+        if inst_type == "radarr":
+            result["radarr"] = process_duplicates(
+                inst["urls"],
+                inst["keys"],
+                endpoint="movie",
+                id_field="tmdbId",
+                instance_type="radarr",
+            )
+        elif inst_type == "sonarr":
+            result["sonarr"] = process_duplicates(
+                inst["urls"],
+                inst["keys"],
+                endpoint="series",
+                id_field="tvdbId",
+                instance_type="sonarr",
+            )
+        else:
+            raise ValueError(f"Unknown instance type: {inst_type}")
+
+    return result
 
 ##############
 #### MAIN ####
@@ -484,16 +549,32 @@ def main():
             if ENABLE_RSS_CIRCLE:
                 logger.info("Starting RSS circle.")
                 rss_cycle()
-            else:
-                logger.info("RSS circle disabled.")
+            if ENABLE_DUPE_CHECK:
+                logger.info("Running duplicate media check.")
+                dupe_result = run_duplicate_check()
+                radarr_dupes = dupe_result.get("radarr", {})
+                sonarr_dupes = dupe_result.get("sonarr", {})
+                if not radarr_dupes and not sonarr_dupes:
+                    logger.info("No duplicates found.")
+                else:
+                    logger.warning("Duplicate media detected across instances!")
+                    for tmdb_id, entries in radarr_dupes.items():
+                        if not ENABLE_DUPE_DELETION:
+                            logger.warning(f"RADARR duplicate TMDB ID {tmdb_id}:")
+                            for e in entries:
+                                logger.warning(f"  {e['instance']} :: {e['title']} ({e['year']}) [id={e['internal_id']}]")
+                    for tvdb_id, entries in sonarr_dupes.items():
+                        logger.warning(f"SONARR duplicate TVDB ID {tvdb_id}:")
+                        for e in entries:
+                            logger.warning(f"  {e['instance']} :: {e['title']} ({e['year']}) [id={e['internal_id']}]")
             logger.info( f"Cycle completed successfully, sleeping {CIRCLE_TIMER} seconds")
             time.sleep(CIRCLE_TIMER)
         except Exception as e:
             logger.error(
-                f"Fatal error in main loop: {e}",
-                exc_info=True
+            f"Fatal error in main loop: {e}",
+            exc_info=True
             )
-            return
+        return
 			
 if __name__ == "__main__":
     main()
