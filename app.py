@@ -561,11 +561,8 @@ def main():
             logger.info( f"Cycle completed successfully, sleeping {CIRCLE_TIMER} seconds")
             time.sleep(CIRCLE_TIMER)
         except Exception as e:
-            logger.error(
-            f"Fatal error in main loop: {e}",
-            exc_info=True
-            )
-        return
+            logger.error(f"Fatal error in main loop: {e}", exc_info=True)
+    return
 			
 if __name__ == "__main__":
     main()
