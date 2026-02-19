@@ -1,5 +1,7 @@
-# Add your own Keys and make sure SKIP_INDIVIDUAL_... has one true or false for each URL.
 {
+  "_comment":[
+    "Add your own Keys and make sure SKIP_INDIVIDUAL_... has one true or false for each URL."
+  ],
   "RADARR_URLS": [
     "http://127.0.0.1:7879",
     "http://127.0.0.1:7878",
@@ -34,3 +36,4 @@
   "SKIP_INDIVIDUAL_INSTANCES_SEARCH": [false, true, true, true, true]
 
 }
+
