@@ -1,3 +1,4 @@
+# Add your own Keys and make sure SKIP_INDIVIDUAL_... has one true or false for each URL.
 {
   "RADARR_URLS": [
     "http://127.0.0.1:7879",
@@ -5,17 +6,17 @@
     "http://127.0.0.1:7880"
   ],
   "RADARR_API_KEYS": [
-    "cceca0f16d5c4888babae82688624307",
-    "d7091e78b4bf428dbb044320d5c42e86",
-    "cceca0f16d5c4888babae82688624307"
+    "1234",
+    "1234",
+    "1234"
   ],
   "SONARR_URLS": [
     "http://127.0.0.1:8989",
     "http://127.0.0.1:8990"
   ],
   "SONARR_API_KEYS": [
-    "1b2cbcca881741378bfb943a36a48650",
-    "1b2cbcca881741378bfb943a36a48650"
+    "1234",
+    "1234"
   ],
   "ENABLE_RSS_CIRCLE": true,
   "ENABLE_SONARR": false,
@@ -31,4 +32,5 @@
   "RECENT_SEARCH_DAYS": 7,
   "SKIP_INDIVIDUAL_INSTANCES_RSS": [false, false, true, true, true],
   "SKIP_INDIVIDUAL_INSTANCES_SEARCH": [false, true, true, true, true]
+
 }
