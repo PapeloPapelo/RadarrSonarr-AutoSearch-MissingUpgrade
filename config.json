@@ -1,0 +1,34 @@
+{
+  "RADARR_URLS": [
+    "http://127.0.0.1:7879",
+    "http://127.0.0.1:7878",
+    "http://127.0.0.1:7880"
+  ],
+  "RADARR_API_KEYS": [
+    "cceca0f16d5c4888babae82688624307",
+    "d7091e78b4bf428dbb044320d5c42e86",
+    "cceca0f16d5c4888babae82688624307"
+  ],
+  "SONARR_URLS": [
+    "http://127.0.0.1:8989",
+    "http://127.0.0.1:8990"
+  ],
+  "SONARR_API_KEYS": [
+    "1b2cbcca881741378bfb943a36a48650",
+    "1b2cbcca881741378bfb943a36a48650"
+  ],
+  "ENABLE_RSS_CIRCLE": true,
+  "ENABLE_SONARR": false,
+  "ENABLE_RADARR": true,
+  "ENABLE_DUPE_CHECK": false,
+  "ENABLE_DUPE_DELETION": false,
+  "WHAT_TO_SEARCH": "MISSING",
+  "NUM_MOVIES_TO_UPGRADE": 3,
+  "MAX_SEASONS": 1,
+  "CIRCLE_TIMER": 2500,
+  "TIME_BETWEEN_RSS_CALLS": 300,
+  "TIME_BETWEEN_ARR_INSTANCES": 90,
+  "RECENT_SEARCH_DAYS": 7,
+  "SKIP_INDIVIDUAL_INSTANCES_RSS": [false, false, true, true, true],
+  "SKIP_INDIVIDUAL_INSTANCES_SEARCH": [false, true, true, true, true]
+}
