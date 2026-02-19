@@ -7,117 +7,9 @@ import os
 from datetime import datetime, timezone
 import sys
 import threading
+import re
 
-######################################
-##############  CONFIGS ##############
-######################################
-
-RADARR_URLS = [			# Make sure the URLS and matching API-Keys are in the same order! First URL = First Key.
-    "http://localhost:7879",
-    "http://localhost:7878",
-]
-
-RADARR_API_KEYS = [
-    "1234",
-    "1234",
-]
-
-SONARR_URLS = [
-    "http://localhost:8989",
-]
-
-SONARR_API_KEYS = [
-    "1324",
-]
-
-				# INFO: Disable RSS-Sync-Interval (=0) in Radarr and Sonarr! It will be triggered one instance at a time.
-ENABLE_RSS_CIRCLE = True	# or False - ENABLE_SONARR or ENABLE_RADARR are unrelated to RSS.
-ENABLE_SONARR = True		# or False
-ENABLE_RADARR = True		# or False
-ENABLE_DUPE_CHECK = False	# or False When enabled it compares tmdb_id and tvdb_ids between *arr instances and throws a Warning if a movie or show is added twice.
-ENABLE_DUPE_DELETION = False	# WARNING! If a radarr duplicate is found the one with the lowest custom score will be fully deleted! Sonarr will only be logged no deletion.
-
-WHAT_TO_SEARCH = "MISSING"	# or UPGRADE NOTE: Upgrade only works for Radarr it will skip Sonarr.
-
-NUM_MOVIES_TO_UPGRADE = 1	# Per Circle this many searches to Tracker will be triggered for each radarr instance.
-MAX_SEASONS = 1			# How many Seasons one circle will Search for each Sonarr instance.
-
-CIRCLE_TIMER = 2500		# For one full circle through all enabled moduls Radarr-Sonarr-Rss.
-TIME_BETWEEN_RSS_CALLS = 300	# This is the time between each RSS-Instance, once run it will wait the CIRCLE_TIMER.
-TIME_BETWEEN_ARR_INSTANCES = 60	# Each instance will trigger NUM_MOVIES_TO_UPGRADE with no further break.
-
-RECENT_SEARCH_DAYS = 7		# Amount of time when a searched item might be searched again earliest, for full fresh start delete 'searched_movies.json'.
-
-######################################
-######################################
-######################################
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    filename='output.log',
-    encoding='utf-8',
-    format='%(asctime)s %(message)s',
-    datefmt='%m/%d/%Y %I:%M:%S %p',
-    level=logging.INFO
-)
-
-INSTANCES = [
-    {
-        "type": "radarr",
-        "urls": RADARR_URLS,
-        "keys": RADARR_API_KEYS,
-    },
-    {
-        "type": "sonarr",
-        "urls": SONARR_URLS,
-        "keys": SONARR_API_KEYS,
-    },
-]
-
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def get_last_log_entry():
-    try:
-        with open('output.log', 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            return lines[-1].strip() if lines else "No logs yet."
-    except Exception as e:
-        return f"Could not read log file: {e}"
-
-def print_status(radarr_enabled, sonarr_enabled, rss_enabled):
-    last_log = get_last_log_entry()
-    last_log_trimmed = last_log[:150] + ("..." if len(last_log) > 150 else "")
-
-    banner = [
-        "========================================",
-        f"RADARR: {'ENABLED' if radarr_enabled else 'DISABLED'}",
-        f"SONARR: {'ENABLED' if sonarr_enabled else 'DISABLED'}",
-        f"RSS:    {'ENABLED' if rss_enabled else 'DISABLED'}",
-        "----------------------------------------",
-        f"Last log: {last_log_trimmed}",
-        "========================================",
-    ]
-
-    clear_screen()
-    print("\n".join(banner))
-
-def status_loop():
-    while True:
-        print_status(
-            ENABLE_RADARR,
-            ENABLE_SONARR,
-            ENABLE_RSS_CIRCLE
-        )
-        time.sleep(15)
-
-def cleanup_searched_movies():
-    searched = load_searched_movies()
-    now = time.time()
-    for movie_id, timestamp in list(searched.items()):
-        if now - timestamp > RECENT_SEARCH_DAYS * 86400:
-            del searched[movie_id]
-    save_searched_movies(searched)
+config = None
 
 MOVIE_ENDPOINT = "movie"
 MOVIEFILE_ENDPOINT = "moviefile/"
@@ -131,6 +23,211 @@ radarr_headers = {}
 EPISODE_ENDPOINT = "episode"
 EPISODEFILE_ENDPOINT = "episodefile"
 TIMEOUT = 30
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    filename='output.log',
+    encoding='utf-8',
+    format='%(asctime)s %(message)s',
+    datefmt='%m/%d/%Y %I:%M:%S %p',
+    level=logging.INFO
+)
+
+URL_REGEX = r"^^(https?:\/\/)?[a-zA-Z0-9.-]+(:[0-9]{1,5})?$"
+API_KEY_REGEX = r"^^[a-f0-9]{32}$"
+WHAT_TO_SEARCH_VALUES = {"MISSING", "UPGRADE"}
+
+def load_config():
+    global config
+    config_file = "config.json"
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"Configuration file {config_file} not found.")
+    with open(config_file, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+def initialize_config():
+    global RADARR_URLS, RADARR_API_KEYS, SONARR_URLS, SONARR_API_KEYS
+    global ENABLE_RSS_CIRCLE, ENABLE_SONARR, ENABLE_RADARR, ENABLE_DUPE_CHECK, ENABLE_DUPE_DELETION
+    global WHAT_TO_SEARCH, NUM_MOVIES_TO_UPGRADE, MAX_SEASONS, CIRCLE_TIMER, TIME_BETWEEN_RSS_CALLS
+    global TIME_BETWEEN_ARR_INSTANCES, RECENT_SEARCH_DAYS
+    global SKIP_INDIVIDUAL_INSTANCES_RSS, SKIP_INDIVIDUAL_INSTANCES_SEARCH
+
+    RADARR_URLS = config["RADARR_URLS"]
+    RADARR_API_KEYS = config["RADARR_API_KEYS"]
+    SONARR_URLS = config["SONARR_URLS"]
+    SONARR_API_KEYS = config["SONARR_API_KEYS"]
+
+    ENABLE_RSS_CIRCLE = config["ENABLE_RSS_CIRCLE"]
+    ENABLE_SONARR = config["ENABLE_SONARR"]
+    ENABLE_RADARR = config["ENABLE_RADARR"]
+    ENABLE_DUPE_CHECK = config["ENABLE_DUPE_CHECK"]
+    ENABLE_DUPE_DELETION = config["ENABLE_DUPE_DELETION"]
+
+    WHAT_TO_SEARCH = config["WHAT_TO_SEARCH"]
+    NUM_MOVIES_TO_UPGRADE = config["NUM_MOVIES_TO_UPGRADE"]
+    MAX_SEASONS = config["MAX_SEASONS"]
+    CIRCLE_TIMER = config["CIRCLE_TIMER"]
+    TIME_BETWEEN_RSS_CALLS = config["TIME_BETWEEN_RSS_CALLS"]
+    TIME_BETWEEN_ARR_INSTANCES = config["TIME_BETWEEN_ARR_INSTANCES"]
+    RECENT_SEARCH_DAYS = config["RECENT_SEARCH_DAYS"]
+    SKIP_INDIVIDUAL_INSTANCES_RSS = config["SKIP_INDIVIDUAL_INSTANCES_RSS"]
+    SKIP_INDIVIDUAL_INSTANCES_SEARCH = config["SKIP_INDIVIDUAL_INSTANCES_SEARCH"]
+
+    # Validate flags length
+    if len(SKIP_INDIVIDUAL_INSTANCES_RSS) != len(RADARR_URLS) + len(SONARR_URLS):
+        logger.error("Mismatch between number of instances and number of flags in SKIP_INDIVIDUAL_INSTANCES_RSS.")
+        return False
+    if len(SKIP_INDIVIDUAL_INSTANCES_SEARCH) != len(RADARR_URLS) + len(SONARR_URLS):
+        logger.error("Mismatch between number of instances and number of flags in SKIP_INDIVIDUAL_INSTANCES_SEARCH.")
+        return False
+
+    # Validate that the flag values are booleans
+    if not all(isinstance(flag, bool) for flag in SKIP_INDIVIDUAL_INSTANCES_RSS):
+        logger.error("All values in SKIP_INDIVIDUAL_INSTANCES_RSS should be booleans.")
+        return False
+    if not all(isinstance(flag, bool) for flag in SKIP_INDIVIDUAL_INSTANCES_SEARCH):
+        logger.error("All values in SKIP_INDIVIDUAL_INSTANCES_SEARCH should be booleans.")
+        return False
+    global INSTANCES
+    # Initialize instances
+    INSTANCES = [
+        {
+            "type": "radarr",
+            "urls": RADARR_URLS,
+            "keys": RADARR_API_KEYS,
+            "skip_rss": SKIP_INDIVIDUAL_INSTANCES_RSS[:len(RADARR_URLS)],
+            "skip_search_trigger": SKIP_INDIVIDUAL_INSTANCES_SEARCH[:len(RADARR_URLS)],
+        },
+        {
+            "type": "sonarr",
+            "urls": SONARR_URLS,
+            "keys": SONARR_API_KEYS,
+            "skip_rss": SKIP_INDIVIDUAL_INSTANCES_RSS[len(RADARR_URLS):],
+            "skip_search_trigger": SKIP_INDIVIDUAL_INSTANCES_SEARCH[len(RADARR_URLS):],
+        },
+    ]
+    return True
+
+def validate_config():
+    global config
+    if not config:
+        logger.error("Config is not loaded.")
+        return False
+    required_keys = [
+        "RADARR_URLS", "RADARR_API_KEYS", "SONARR_URLS", "SONARR_API_KEYS",
+        "ENABLE_RSS_CIRCLE", "ENABLE_SONARR", "ENABLE_RADARR", "ENABLE_DUPE_CHECK",
+        "ENABLE_DUPE_DELETION", "WHAT_TO_SEARCH", "NUM_MOVIES_TO_UPGRADE", 
+        "MAX_SEASONS", "CIRCLE_TIMER", "TIME_BETWEEN_RSS_CALLS", "TIME_BETWEEN_ARR_INSTANCES", "RECENT_SEARCH_DAYS",
+        "SKIP_INDIVIDUAL_INSTANCES_RSS", "SKIP_INDIVIDUAL_INSTANCES_SEARCH"
+    ]
+    for key in required_keys:
+        if key not in config:
+            logger.error(f"Missing required config key: {key}")
+            return False
+    if len(config["SKIP_INDIVIDUAL_INSTANCES_RSS"]) != len(config["RADARR_URLS"]) + len(config["SONARR_URLS"]):
+        logger.error("Mismatch between number of flags and number of instances in SKIP_INDIVIDUAL_INSTANCES_RSS.")
+        return False
+    if len(config["SKIP_INDIVIDUAL_INSTANCES_SEARCH"]) != len(config["RADARR_URLS"]) + len(config["SONARR_URLS"]):
+        logger.error("Mismatch between number of flags and number of instances in SKIP_INDIVIDUAL_INSTANCES_SEARCH.")
+        return False
+    for url in config["RADARR_URLS"]:
+        if not re.match(URL_REGEX, url):
+            logger.error(f"Invalid RADARR URL format: {url}")
+            return False
+    for url in config["SONARR_URLS"]:
+        if not re.match(URL_REGEX, url):
+            logger.error(f"Invalid SONARR URL format: {url}")
+            return False
+    for api_key in config["RADARR_API_KEYS"]:
+        if not re.match(API_KEY_REGEX, str(api_key)):
+            logger.error(f"Invalid RADARR API key format: {api_key}")
+            return False
+    for api_key in config["SONARR_API_KEYS"]:
+        if not re.match(API_KEY_REGEX, str(api_key)):
+            logger.error(f"Invalid SONARR API key format: {api_key}")
+            return False
+    boolean_flags = [
+        "ENABLE_RSS_CIRCLE", "ENABLE_SONARR", "ENABLE_RADARR", 
+        "ENABLE_DUPE_CHECK", "ENABLE_DUPE_DELETION"
+    ]
+    for flag in boolean_flags:
+        if not isinstance(config.get(flag), bool):
+            logger.error(f"Config key '{flag}' should be a boolean.")
+            return False
+    if config["WHAT_TO_SEARCH"] not in WHAT_TO_SEARCH_VALUES:
+        logger.error(f"Invalid WHAT_TO_SEARCH value: {config['WHAT_TO_SEARCH']}")
+        return False
+    numeric_fields = [
+        "NUM_MOVIES_TO_UPGRADE", "MAX_SEASONS", 
+        "CIRCLE_TIMER", "TIME_BETWEEN_RSS_CALLS", 
+        "TIME_BETWEEN_ARR_INSTANCES", "RECENT_SEARCH_DAYS"
+    ]
+    for field in numeric_fields:
+        if not isinstance(config.get(field), int):
+            logger.error(f"Config key '{field}' should be an integer.")
+            return False
+    if config["NUM_MOVIES_TO_UPGRADE"] <= 0:
+        logger.error("NUM_MOVIES_TO_UPGRADE should be a positive integer.")
+        return False
+    if config["MAX_SEASONS"] <= 0:
+        logger.error("MAX_SEASONS should be a positive integer.")
+        return False
+    if config["CIRCLE_TIMER"] <= 0:
+        logger.error("CIRCLE_TIMER should be a positive integer.")
+        return False
+    if config["TIME_BETWEEN_RSS_CALLS"] <= 0:
+        logger.error("TIME_BETWEEN_RSS_CALLS should be a positive integer.")
+        return False
+    if config["TIME_BETWEEN_ARR_INSTANCES"] <= 0:
+        logger.error("TIME_BETWEEN_ARR_INSTANCES should be a positive integer.")
+        return False
+    if config["RECENT_SEARCH_DAYS"] <= 0:
+        logger.error("RECENT_SEARCH_DAYS should be a positive integer.")
+        return False
+    return True
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def get_last_log_entry():
+    try:
+        with open('output.log', 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            return lines[-1].strip() if lines else "No logs yet."
+    except Exception as e:
+        return f"Could not read log file: {e}"
+
+def print_status():
+    last_log = get_last_log_entry()
+    last_log_trimmed = last_log[:150] + ("..." if len(last_log) > 150 else "")
+
+    banner = [
+        "========================================",
+        f"RADARR: {'ENABLED' if ENABLE_RADARR else 'DISABLED'}",
+        f"SONARR: {'ENABLED' if ENABLE_SONARR else 'DISABLED'}",
+        f"RSS:    {'ENABLED' if ENABLE_RSS_CIRCLE else 'DISABLED'}",
+        f"DUPE CHECK:       {'ENABLED' if ENABLE_DUPE_CHECK else 'DISABLED'}",
+        f"DUPE DELETION:    {'ENABLED' if ENABLE_DUPE_DELETION else 'DISABLED'}",
+        "----------------------------------------",
+        f"Last log: {last_log_trimmed}",
+        "========================================",
+    ]
+
+    clear_screen()
+    print("\n".join(banner))
+
+def status_loop():
+    while True:
+        print_status()
+        time.sleep(15)
+
+def cleanup_searched_movies():
+    searched = load_searched_movies()
+    now = time.time()
+    for movie_id, timestamp in list(searched.items()):
+        if now - timestamp > RECENT_SEARCH_DAYS * 86400:
+            del searched[movie_id]
+    save_searched_movies(searched)
 
 ################
 #### SONARR ####
@@ -407,17 +504,22 @@ def trigger_rss_sync(url, headers):
         logger.error(f"Failed to trigger RSS sync for {url}: {e}")
 
 def rss_cycle():
-    for radarr_url in RADARR_URLS:
-        url_index = RADARR_URLS.index(radarr_url)
-        headers = {"X-Api-Key": RADARR_API_KEYS[url_index]}
-        trigger_rss_sync(radarr_url, headers)
-        time.sleep(TIME_BETWEEN_RSS_CALLS)
-    for sonarr_url in SONARR_URLS:
-        url_index = SONARR_URLS.index(sonarr_url)
-        headers = {"X-Api-Key": SONARR_API_KEYS[url_index]}
-        trigger_rss_sync(sonarr_url, headers)
-        time.sleep(TIME_BETWEEN_RSS_CALLS)
+    for idx, radarr_url in enumerate(RADARR_URLS):
+        if SKIP_INDIVIDUAL_INSTANCES_RSS[idx]:
+            logger.info(f"Skipping RSS sync for Radarr instance {radarr_url}")
+        else:
+            headers = {"X-Api-Key": RADARR_API_KEYS[idx]}
+            trigger_rss_sync(radarr_url, headers)
+            time.sleep(TIME_BETWEEN_RSS_CALLS)
+    for idx, sonarr_url in enumerate(SONARR_URLS):
+        if SKIP_INDIVIDUAL_INSTANCES_RSS[len(RADARR_URLS) + idx]:
+            logger.info(f"Skipping RSS sync for Sonarr instance {sonarr_url}")
+        else:
+            headers = {"X-Api-Key": SONARR_API_KEYS[idx]}
+            trigger_rss_sync(sonarr_url, headers)
+            time.sleep(TIME_BETWEEN_RSS_CALLS)
     logger.info("Completed RSS sync cycle.")
+
 
 ###################
 ### DUPE CHECK ####
@@ -444,6 +546,82 @@ def process_duplicates(urls, keys, endpoint, id_field, instance_type):
             if not uid:
                 continue
 
+            # Extracting file info for Radarr
+            movie_file = item.get("movieFile") or {}
+            file_size = movie_file.get("size", 0)
+            
+            # Additional Check: Resolution/Quality horizontal ranking
+            # Higher resolution (e.g., 2160) gets a higher priority
+            quality_res = movie_file.get("quality", {}).get("quality", {}).get("resolution", 0)
+
+            id_map.setdefault(uid, []).append({
+                "instance": url,
+                "title": item.get("title"),
+                "year": item.get("year"),
+                "internal_id": item.get("id"),
+                "has_file": item.get("hasFile", False),
+                "score": item.get("customFormatScore") or 0, # Note: Radarr API uses customFormatScore
+                "size": file_size,
+                "res": quality_res
+            })
+
+    duplicates = {k: v for k, v in id_map.items() if len(v) > 1}
+
+    if ENABLE_DUPE_DELETION and instance_type.lower() == "radarr":
+        for uid, entries in duplicates.items():
+            # SORTING LOGIC:
+            # 1. Presence of file (Don't delete a real file for a placeholder)
+            # 2. Custom Score (Highest score stays)
+            # 3. Resolution (Tie-breaker for score)
+            # 4. Size (Final tie-breaker)
+            
+            # We sort ascending so the first element [0] is the "worst" (the one to delete)
+            sorted_entries = sorted(entries, key=lambda x: (
+                x["has_file"], 
+                x["score"], 
+                x["res"], 
+                x["size"]
+            ))
+
+            # The best entry is at the end; all others are candidates for deletion
+            # To be safe, we only delete the single "worst" one per run
+            lowest = sorted_entries[0]
+            
+            # Final Safety: If both have files and scores are identical, 
+            # ensure we aren't deleting the only copy if something went wrong.
+            if len(sorted_entries) < 2:
+                continue
+
+            instance_url = lowest["instance"]
+            internal_id = lowest["internal_id"]
+
+            try:
+                delete_endpoint = f"movie/{internal_id}"
+                logger.info(f"Deleting RADARR duplicate '{lowest['title']}' (Score: {lowest['score']}, Size: {lowest['size']}) from {instance_url}")
+                
+                resp = requests.delete(
+                    instance_url + API_PATH + delete_endpoint,
+                    headers={"X-Api-Key": keys[urls.index(instance_url)]},
+                    params={"deleteFiles": True},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+            except Exception as e:
+                logger.error(f"Failed to delete {lowest['title']} from {instance_url}: {e}")
+
+    return duplicates
+
+def process_duplicatesOLD(urls, keys, endpoint, id_field, instance_type):
+    id_map = {}
+
+    for url, key in zip(urls, keys):
+        items = api_get(url, key, endpoint)
+
+        for item in items:
+            uid = item.get(id_field)
+            if not uid:
+                continue
+
             id_map.setdefault(uid, []).append({
                 "instance": url,
                 "title": item.get("title"),
@@ -451,18 +629,13 @@ def process_duplicates(urls, keys, endpoint, id_field, instance_type):
                 "internal_id": item.get("id"),
                 "score": item.get("customScore") or 0,  # Radarr only
             })
-
-    # keep only duplicates
     duplicates = {k: v for k, v in id_map.items() if len(v) > 1}
-
-    # deletion logic (Radarr only)
     if ENABLE_DUPE_DELETION and instance_type.lower() == "radarr":
         for uid, entries in duplicates.items():
             # find lowest scored entry
             lowest = min(entries, key=lambda x: x["score"])
             instance_url = lowest["instance"]
             internal_id = lowest["internal_id"]
-
             try:
                 delete_endpoint = f"movie/{internal_id}"
                 logger.info(f"Deleting RADARR duplicate '{lowest['title']}' from {instance_url}")
@@ -475,7 +648,6 @@ def process_duplicates(urls, keys, endpoint, id_field, instance_type):
                 resp.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to delete {lowest['title']} from {instance_url}: {e}")
-
     return duplicates
 
 def run_duplicate_check():
@@ -495,6 +667,8 @@ def run_duplicate_check():
                 instance_type="radarr",
             )
         elif inst_type == "sonarr":
+            logger.info(f"Skipping Sonarr")
+            continue
             result["sonarr"] = process_duplicates(
                 inst["urls"],
                 inst["keys"],
@@ -512,7 +686,10 @@ def run_duplicate_check():
 ##############
 
 def main():
+    global config
     try:
+        load_config()
+        initialize_config()
         if not os.path.exists(SEARCHED_MOVIES_FILE):
             with open(SEARCHED_MOVIES_FILE, 'w') as f:
                 json.dump({}, f)
@@ -525,18 +702,37 @@ def main():
     threading.Thread(target=status_loop, daemon=True).start()
     while True:
         try:
+            config_retries = 0
+            load_config()
+            initialize_config()
+            if not validate_config():
+                logger.warning("Invalid configuration detected. Re-Try in 2.5 Minutes.")
+                config_retries = config_retries + 1
+                if config_retries > 5:
+                    logger.warning("Config File failed validity check 5 times. Check the config.json and start again.")
+                    return
+                time.sleep(150)
+                continue
             cleanup_searched_movies()
             logger.info(f"Starting new cycle with goal: {WHAT_TO_SEARCH}")
             if ENABLE_RADARR:
-                for radarr_url in RADARR_URLS:
-                    logger.info(f"Processing Radarr instance: {radarr_url}")
-                    process_radarr(radarr_url)
-                    time.sleep(TIME_BETWEEN_ARR_INSTANCES)
+                for idx, radarr_url in enumerate(RADARR_URLS):
+                    if SKIP_INDIVIDUAL_INSTANCES_SEARCH[idx]:
+                        logger.info(f"Skipping Radarr search trigger for instance {radarr_url}")
+                    else:
+                        logger.info(f"Processing Radarr instance: {radarr_url}")
+                        process_radarr(radarr_url)
+                        time.sleep(TIME_BETWEEN_ARR_INSTANCES)
+
             if ENABLE_SONARR:
-                for sonarr_url in SONARR_URLS:
-                    logger.info(f"Processing Sonarr instance: {sonarr_url}")
-                    process_sonarr(sonarr_url)
-                    time.sleep(TIME_BETWEEN_ARR_INSTANCES)
+                for idx, sonarr_url in enumerate(SONARR_URLS):
+                    if SKIP_INDIVIDUAL_INSTANCES_SEARCH[len(RADARR_URLS) + idx]:
+                        logger.info(f"Skipping Sonarr search trigger for instance {sonarr_url}")
+                    else:
+                        logger.info(f"Processing Sonarr instance: {sonarr_url}")
+                        process_sonarr(sonarr_url)
+                        time.sleep(TIME_BETWEEN_ARR_INSTANCES)
+
             if ENABLE_RSS_CIRCLE:
                 logger.info("Starting RSS circle.")
                 rss_cycle()
