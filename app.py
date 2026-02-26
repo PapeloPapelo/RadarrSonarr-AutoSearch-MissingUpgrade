@@ -48,7 +48,7 @@ def load_config():
 def initialize_config():
     global RADARR_URLS, RADARR_API_KEYS, SONARR_URLS, SONARR_API_KEYS
     global ENABLE_RSS_CIRCLE, ENABLE_SONARR, ENABLE_RADARR, ENABLE_DUPE_CHECK, ENABLE_DUPE_DELETION
-    global WHAT_TO_SEARCH, NUM_MOVIES_TO_UPGRADE, MAX_SEASONS, CIRCLE_TIMER, TIME_BETWEEN_RSS_CALLS
+    global WHAT_TO_SEARCH, MAX_MOVIES, MAX_SEASONS, CIRCLE_TIMER, TIME_BETWEEN_RSS_CALLS
     global TIME_BETWEEN_ARR_INSTANCES, RECENT_SEARCH_DAYS
     global SKIP_INDIVIDUAL_INSTANCES_RSS, SKIP_INDIVIDUAL_INSTANCES_SEARCH
 
@@ -64,7 +64,7 @@ def initialize_config():
     ENABLE_DUPE_DELETION = config["ENABLE_DUPE_DELETION"]
 
     WHAT_TO_SEARCH = config["WHAT_TO_SEARCH"]
-    NUM_MOVIES_TO_UPGRADE = config["NUM_MOVIES_TO_UPGRADE"]
+    MAX_MOVIES = config["MAX_MOVIES"]
     MAX_SEASONS = config["MAX_SEASONS"]
     CIRCLE_TIMER = config["CIRCLE_TIMER"]
     TIME_BETWEEN_RSS_CALLS = config["TIME_BETWEEN_RSS_CALLS"]
@@ -116,7 +116,7 @@ def validate_config():
     required_keys = [
         "RADARR_URLS", "RADARR_API_KEYS", "SONARR_URLS", "SONARR_API_KEYS",
         "ENABLE_RSS_CIRCLE", "ENABLE_SONARR", "ENABLE_RADARR", "ENABLE_DUPE_CHECK",
-        "ENABLE_DUPE_DELETION", "WHAT_TO_SEARCH", "NUM_MOVIES_TO_UPGRADE", 
+        "ENABLE_DUPE_DELETION", "WHAT_TO_SEARCH", "MAX_MOVIES", 
         "MAX_SEASONS", "CIRCLE_TIMER", "TIME_BETWEEN_RSS_CALLS", "TIME_BETWEEN_ARR_INSTANCES", "RECENT_SEARCH_DAYS",
         "SKIP_INDIVIDUAL_INSTANCES_RSS", "SKIP_INDIVIDUAL_INSTANCES_SEARCH"
     ]
@@ -158,7 +158,7 @@ def validate_config():
         logger.error(f"Invalid WHAT_TO_SEARCH value: {config['WHAT_TO_SEARCH']}")
         return False
     numeric_fields = [
-        "NUM_MOVIES_TO_UPGRADE", "MAX_SEASONS", 
+        "MAX_MOVIES", "MAX_SEASONS", 
         "CIRCLE_TIMER", "TIME_BETWEEN_RSS_CALLS", 
         "TIME_BETWEEN_ARR_INSTANCES", "RECENT_SEARCH_DAYS"
     ]
@@ -166,8 +166,8 @@ def validate_config():
         if not isinstance(config.get(field), int):
             logger.error(f"Config key '{field}' should be an integer.")
             return False
-    if config["NUM_MOVIES_TO_UPGRADE"] <= 0:
-        logger.error("NUM_MOVIES_TO_UPGRADE should be a positive integer.")
+    if config["MAX_MOVIES"] <= 0:
+        logger.error("MAX_MOVIES should be a positive integer.")
         return False
     if config["MAX_SEASONS"] <= 0:
         logger.error("MAX_SEASONS should be a positive integer.")
@@ -466,10 +466,10 @@ def process_radarr(radarr_url):
         logger.info(f"All movies have been searched recently for {radarr_url}. Skipping this cycle.")
         return
     try:    
-        if len(filtered_movie_ids) < NUM_MOVIES_TO_UPGRADE:
+        if len(filtered_movie_ids) < MAX_MOVIES:
             random_keys = filtered_movie_ids
         else: 
-            random_keys = random.sample(filtered_movie_ids, k=NUM_MOVIES_TO_UPGRADE)
+            random_keys = random.sample(filtered_movie_ids, k=MAX_MOVIES)
     except ValueError:
         logger.warning("Not enough movies to select for search.")
         return
