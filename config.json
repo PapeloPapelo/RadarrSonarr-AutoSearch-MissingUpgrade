@@ -17,7 +17,7 @@
     "1234",
     "1234"
   ],
-  "ENABLE_RSS_CIRCLE": true,
+  "ENABLE_RSS": true,
   "ENABLE_SONARR": false,
   "ENABLE_RADARR": false,
   "ENABLE_DUPE_CHECK": true,
@@ -33,3 +33,4 @@
   "SKIP_INDIVIDUAL_INSTANCES_SEARCH": [false, true, true, true, true]
 
 }
+
