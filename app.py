@@ -47,7 +47,7 @@ def load_config():
 
 def initialize_config():
     global RADARR_URLS, RADARR_API_KEYS, SONARR_URLS, SONARR_API_KEYS
-    global ENABLE_RSS_CIRCLE, ENABLE_SONARR, ENABLE_RADARR, ENABLE_DUPE_CHECK, ENABLE_DUPE_DELETION
+    global ENABLE_RSS, ENABLE_SONARR, ENABLE_RADARR, ENABLE_DUPE_CHECK, ENABLE_DUPE_DELETION
     global WHAT_TO_SEARCH, MAX_MOVIES, MAX_SEASONS, CIRCLE_TIMER, TIME_BETWEEN_RSS_CALLS
     global TIME_BETWEEN_ARR_INSTANCES, RECENT_SEARCH_DAYS
     global SKIP_INDIVIDUAL_INSTANCES_RSS, SKIP_INDIVIDUAL_INSTANCES_SEARCH
@@ -57,7 +57,7 @@ def initialize_config():
     SONARR_URLS = config["SONARR_URLS"]
     SONARR_API_KEYS = config["SONARR_API_KEYS"]
 
-    ENABLE_RSS_CIRCLE = config["ENABLE_RSS_CIRCLE"]
+    ENABLE_RSS = config["ENABLE_RSS"]
     ENABLE_SONARR = config["ENABLE_SONARR"]
     ENABLE_RADARR = config["ENABLE_RADARR"]
     ENABLE_DUPE_CHECK = config["ENABLE_DUPE_CHECK"]
@@ -115,7 +115,7 @@ def validate_config():
         return False
     required_keys = [
         "RADARR_URLS", "RADARR_API_KEYS", "SONARR_URLS", "SONARR_API_KEYS",
-        "ENABLE_RSS_CIRCLE", "ENABLE_SONARR", "ENABLE_RADARR", "ENABLE_DUPE_CHECK",
+        "ENABLE_RSS", "ENABLE_SONARR", "ENABLE_RADARR", "ENABLE_DUPE_CHECK",
         "ENABLE_DUPE_DELETION", "WHAT_TO_SEARCH", "MAX_MOVIES", 
         "MAX_SEASONS", "CIRCLE_TIMER", "TIME_BETWEEN_RSS_CALLS", "TIME_BETWEEN_ARR_INSTANCES", "RECENT_SEARCH_DAYS",
         "SKIP_INDIVIDUAL_INSTANCES_RSS", "SKIP_INDIVIDUAL_INSTANCES_SEARCH"
@@ -147,7 +147,7 @@ def validate_config():
             logger.error(f"Invalid SONARR API key format: {api_key}")
             return False
     boolean_flags = [
-        "ENABLE_RSS_CIRCLE", "ENABLE_SONARR", "ENABLE_RADARR", 
+        "ENABLE_RSS", "ENABLE_SONARR", "ENABLE_RADARR", 
         "ENABLE_DUPE_CHECK", "ENABLE_DUPE_DELETION"
     ]
     for flag in boolean_flags:
@@ -205,7 +205,7 @@ def print_status():
         "========================================",
         f"RADARR: {'ENABLED' if ENABLE_RADARR else 'DISABLED'}",
         f"SONARR: {'ENABLED' if ENABLE_SONARR else 'DISABLED'}",
-        f"RSS:    {'ENABLED' if ENABLE_RSS_CIRCLE else 'DISABLED'}",
+        f"RSS:    {'ENABLED' if ENABLE_RSS else 'DISABLED'}",
         f"DUPE CHECK:       {'ENABLED' if ENABLE_DUPE_CHECK else 'DISABLED'}",
         f"DUPE DELETION:    {'ENABLED' if ENABLE_DUPE_DELETION else 'DISABLED'}",
         "----------------------------------------",
@@ -726,7 +726,7 @@ def main():
                         process_sonarr(sonarr_url)
                         time.sleep(TIME_BETWEEN_ARR_INSTANCES)
 
-            if ENABLE_RSS_CIRCLE:
+            if ENABLE_RSS:
                 logger.info("Starting RSS circle.")
                 rss_cycle()
             if ENABLE_DUPE_CHECK:
