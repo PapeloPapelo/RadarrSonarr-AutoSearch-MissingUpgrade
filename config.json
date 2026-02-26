@@ -23,7 +23,7 @@
   "ENABLE_DUPE_CHECK": true,
   "ENABLE_DUPE_DELETION": false,
   "WHAT_TO_SEARCH": "MISSING",
-  "NUM_MOVIES_TO_UPGRADE": 3,
+  "MAX_MOVIES": 3,
   "MAX_SEASONS": 1,
   "CIRCLE_TIMER": 2500,
   "TIME_BETWEEN_RSS_CALLS": 300,
@@ -31,4 +31,5 @@
   "RECENT_SEARCH_DAYS": 7,
   "SKIP_INDIVIDUAL_INSTANCES_RSS": [false, false, true, true, true],
   "SKIP_INDIVIDUAL_INSTANCES_SEARCH": [false, true, true, true, true]
+
 }
